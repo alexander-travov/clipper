@@ -102,6 +102,13 @@ cdef class Edge:
     def __repr__(self):
         return 'Edge({}, {})'.format(repr(self.start), repr(self.stop))
 
+    def __richcmp__(self, other, operation):
+        if operation == Py_EQ:
+            return self.start == other.start and self.stop == other.stop
+        if operation == Py_NE:
+            return self.start != other.start or self.stop != other.stop
+        return False
+
     cpdef Point direction(self):
         """
         Вектор направления отрезка
@@ -169,65 +176,59 @@ cdef class Edge:
             return stop_position != LEFT
 
 
-class Polygon:
+cdef class Polygon:
     """
     Многоугольник
     """
-    def __init__(self, points=None):
-        if points is None:
-            points = []
-        self.points = points
+
+    cdef readonly double[:] x, y
+    cdef readonly int N, current
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.N = x.shape[0]
         # текущее окно в многоугольнике
         self.current = 0
 
     def __repr__(self):
-        return 'Polygon(' + ', '.join(repr(p) for p in self.points) + ')'
+        return 'Polygon(' + ', '.join(repr(self.v(i)) for i in range(self.N)) + ')'
 
-    @property
-    def N(self):
-        """
-        Количество точек в многоугольнике.
-        """
-        return len(self.points)
-
-    def v(self, n=None):
+    cpdef Point v(self, int n=-1):
         """
         Вершина с данным номером
         """
-        if n is None:
+        if n == -1:
             n = self.current
-        return self.points[n % self.N]
+        return Point(self.x[n % self.N], self.y[n % self.N])
 
-    def e(self, n=None):
+    cpdef Edge e(self, n=-1):
         """
         Ребро с данным номером
         """
-        if n is None:
+        if n == -1:
             n = self.current
         return Edge(self.v(n), self.v(n+1))
 
-    def add(self, point):
-        if not self.N or point != self.v():
-            self.points.append(point)
-            self.current = self.N - 1
-
-    def advance(self):
+    cpdef advance(self):
         """
         Продвигает текущее окно в многоугольнике
         """
         self.current = (self.current + 1) % self.N
 
-    def contains(self, point):
+    cpdef int contains(self, Point point):
         """
         Определяет лежит ли точка в многоугольнике.
         """
+        cdef int i = 0
+        cdef Edge edge
         for i in range(self.N):
             edge = self.e(i)
-            if (edge.classify(point) == LEFT):
+            if (edge.point_classify(point) == LEFT):
                 return False
         return True
 
-    def area(self):
+    cpdef area(self):
         """
         Определяет площадь многоугольника по алгоритму шнурования.
         """
@@ -235,11 +236,12 @@ class Polygon:
         for i in range(self.N):
             p = self.v(i)
             np = self.v(i+1)
-            s += p.x * np.y - p.y * np.x
-        return s / 2
+            s += triangle_area(p, np)
+        return abs(s)
 
-    def change_orientation(self):
-        return Polygon(list(reversed(self.points)))
+
+cpdef double triangle_area(Point start, Point stop):
+    return (start.x * stop.y - start.y * stop.x)/2
 
 
 UNKNOWN, INSIDE, OUTSIDE = range(3)
@@ -262,20 +264,23 @@ def intersection(P, Q):
         i += 1
         p = P.e()
         q = Q.e()
-        p_pos = q.classify(p.stop)
-        q_pos = p.classify(q.stop)
-        cross_type, intersection_point = p.intersect(q)
+        p_pos = q.point_classify(p.stop)
+        q_pos = p.point_classify(q.stop)
+        cross_type = p.edge_classify(q)
         if cross_type == SKEW_CROSS:
+            intersection_point = p.intersection_point(q)
             if not main_phase:
                 main_phase = True
-                R = Polygon()
-                R.add(intersection_point)
+                R = []
+                R.append(intersection_point)
                 start_point = intersection_point
-            elif not intersection_point == R.v():
+            elif not intersection_point == R[-1]:
                 if intersection_point == start_point:
-                    return R
+                    xs = np.array([p.x for p in R], dtype=np.float_)
+                    ys = np.array([p.y for p in R], dtype=np.float_)
+                    return Polygon(xs, ys)
                 else:
-                    R.add(intersection_point)
+                    R.append(intersection_point)
             if p_pos == RIGHT:
                 flag = INSIDE
             elif q_pos == RIGHT:
@@ -296,11 +301,11 @@ def intersection(P, Q):
         elif p_aims_q:
             P.advance()
             if flag == INSIDE:
-                R.add(P.v())
+                R.append(P.v())
         elif q_aims_p:
             Q.advance()
             if flag == OUTSIDE:
-                R.add(Q.v())
+                R.append(Q.v())
         else:
             if flag == OUTSIDE or (flag == UNKNOWN and p_pos == LEFT):
                 P.advance()
@@ -311,4 +316,4 @@ def intersection(P, Q):
         return Q
     elif Q.contains(P.v()):
         return P
-    return Polygon()
+    return Polygon(np.array([0.]), np.array([0.]))
