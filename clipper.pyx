@@ -3,58 +3,72 @@
 from __future__ import division
 
 cimport cython
+from cpython.object cimport Py_EQ, Py_NE
 import numpy as np
 cimport numpy as np
 
+
 # Положение точки относительно направленного отрезка:
-# LEFT    - слева от прямой
-# RIGHT   - справа от прямой
-# BEHIND  - на прямой, позади отрезка
-# BETWEEN - на прямой, на отрезке
-# BEYOND  - на прямой, за отрезком
-LEFT, RIGHT, BEHIND, BETWEEN, BEYOND = range(5)
+cpdef enum PointOrientation:
+    LEFT = 1     # слева от прямой
+    RIGHT = 2    # справа от прямой
+    BEHIND = 3   # на прямой, позади отрезка
+    BETWEEN = 4  # на прямой, на отрезке
+    BEYOND = 5   # на прямой, за отрезком
 
 
-class Point:
+cdef class Point:
     """
     Класс может использоваться для обозначения точки или вектора на плоскости.
     """
+    cdef readonly float x, y
+
     def __init__(self, x=0, y=0):
         self.x = x
         self.y = y
 
-    def __add__(self, other):
+    cpdef Point add(Point self, Point other):
         return Point(self.x + other.x, self.y + other.y)
 
-    def __sub__(self, other):
+    def __add__(self, other):
+        return self.add(other)
+
+    cpdef Point sub(self, Point other):
         return Point(self.x - other.x, self.y - other.y)
 
-    def __eq__(self, other):
-        return self.x == other.x and self.y == other.y
+    def __sub__(self, other):
+        return self.sub(other)
+
+    def __richcmp__(self, other, operation):
+        if operation == Py_EQ:
+            return self.x == other.x and self.y == other.y
+        elif operation == Py_NE:
+            return self.x != other.x or self.y != other.y
+        else:
+            return False
 
     def __repr__(self):
         return 'Point({}, {})'.format(self.x, self.y)
 
-    def scale(self, k):
+    cpdef Point scale(self, double k):
         return Point(k * self.x, k * self.y)
 
-    def length(self):
+    cpdef double length(self):
         return (self.x * self.x + self.y * self.y)**.5
 
-    def dot(self, other):
+    cpdef double dot(self, Point other):
         return self.x * other.x + self.y * other.y
 
-    def vecdot(self, other):
+    cpdef double vecdot(self, Point other):
         return self.x * other.y - self.y * other.x
 
-    def classify(self, start, stop):
+    cpdef PointOrientation classify(self, Point start, Point stop):
         """
         Положение точки относительно прямой, заданной двумя точками:
         слева, справа, позади, между точками, впереди
         """
-        a = stop - start
-        b = self - start
-        orientation = a.vecdot(b)
+        cdef Point a = stop.sub(start), b = self.sub(start)
+        cdef double orientation = a.vecdot(b)
         if orientation > 0:
             return LEFT
         if orientation < 0:
@@ -67,11 +81,11 @@ class Point:
 
 
 # Взаимное расположение двух отрезков:
-# COLLINEAR     - отрезки сонаправлены, лежат на одной прямой
-# PARALLEL      - отрезки лежат на параллельных прямых
-# SKEW_CROSS    - отрезки пересекаются
-# SKEW_NO_CROSS - прямые на которых лежат отрезки пересекаются, а сами отрезки нет.
-COLLINEAR, PARALLEL, SKEW_CROSS, SKEW_NO_CROSS = range(4)
+cpdef enum LineOrientation:
+    COLLINEAR = 1 # отрезки сонаправлены, лежат на одной прямой
+    PARALLEL = 2 # отрезки лежат на параллельных прямых
+    SKEW_CROSS = 3 # отрезки пересекаются
+    SKEW_NO_CROSS = 4 # прямые на которых лежат отрезки пересекаются, а сами отрезки нет.
 
 
 class Edge:
