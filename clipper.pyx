@@ -88,11 +88,13 @@ cpdef enum LineOrientation:
     SKEW_NO_CROSS = 4 # прямые на которых лежат отрезки пересекаются, а сами отрезки нет.
 
 
-class Edge:
+cdef class Edge:
     """
     Направленный отрезок.
     Определяется двумя точками: началом и концом.
     """
+    cdef readonly Point start, stop
+
     def __init__(self, start, stop):
         self.start = start
         self.stop = stop
@@ -100,59 +102,65 @@ class Edge:
     def __repr__(self):
         return 'Edge({}, {})'.format(repr(self.start), repr(self.stop))
 
-    def direction(self):
+    cpdef Point direction(self):
         """
         Вектор направления отрезка
         """
-        return self.stop - self.start
+        return self.stop.sub(self.start)
 
-    def normal(self):
+    cpdef Point normal(self):
         """
         Вектор перпендикулярный к отрезку
         """
-        d = self.direction()
+        cdef Point d = self.direction()
         return Point(d.y, -d.x)
 
-    def point(self, t):
+    cpdef Point point(self, double t):
         """
         Точка при параметрическом задании прямой, определенной отрезком.
         """
-        return self.start + self.direction().scale(t)
+        return self.start.add(self.direction().scale(t))
 
-    def classify(self, point):
+    cpdef PointOrientation point_classify(self, Point point):
         """
         Положение точки относительно прямой, заданной отрезком:
         слева, справа, позади, между точками, впереди
         """
         return point.classify(self.start, self.stop)
 
-    def intersect(self, other):
+    cpdef LineOrientation edge_classify(self, Edge other):
         """
         Определяет взаимное расположение двух отрезков и точку пересечения, если они пересекаются.
         """
-        n = other.normal()
-        denom = self.direction().dot(n)
-        if denom:
-            t = n.dot(other.start - self.start) / denom
-            p = self.point(t)
-            if 0 <= t <= 1:
-                return SKEW_CROSS, p
+        cdef Point normal = self.normal(), other_normal = other.normal()
+        cdef double denom1 = self.direction().dot(other_normal), t, u
+        if denom1:
+            # Определяем параметры точки пересечения на отрезках
+            t = other_normal.dot(other.start.sub(self.start)) / denom1
+            u = normal.dot(self.start.sub(other.start)) / other.direction().dot(normal)
+            if t < 0 or t >= 1 or u < 0 or u >= 1:
+                return SKEW_NO_CROSS
             else:
-                return SKEW_NO_CROSS, p
-        position = other.classify(self.start)
-        if position == LEFT or position == RIGHT:
-            return PARALLEL, Point()
-        return COLLINEAR, Point()
+                return SKEW_CROSS
+        cdef PointOrientation orientation = other.point_classify(self.start)
+        if orientation == LEFT or orientation == RIGHT:
+            return PARALLEL
+        return COLLINEAR
 
-    def aims_at(self, other):
+    cpdef Point intersection_point(self, Edge other):
+        cdef Point n = other.normal()
+        cdef double t = n.dot(other.start.sub(self.start)) / self.direction().dot(n)
+        return self.point(t)
+
+    cpdef int aims_at(self, Edge other):
         """
         Определяет нацелен ли отрезок на другой.
 
         Отрезок считается нацеленным на второй, если прямая, заданная вторым отрезком располагается
         перед первым.
         """
-        cross_type, _ = self.intersect(other)
-        stop_position = other.classify(self.stop)
+        cdef LineOrientation cross_type = self.edge_classify(other)
+        cdef PointOrientation stop_position = other.point_classify(self.stop)
         if cross_type == COLLINEAR:
             return stop_position != BEYOND
         if self.direction().vecdot(other.direction()) >= 0:
