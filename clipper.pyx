@@ -2,6 +2,9 @@
 
 from __future__ import division
 
+cimport cython
+import numpy as np
+cimport numpy as np
 
 # Положение точки относительно направленного отрезка:
 # LEFT    - слева от прямой
@@ -9,7 +12,7 @@ from __future__ import division
 # BEHIND  - на прямой, позади отрезка
 # BETWEEN - на прямой, на отрезке
 # BEYOND  - на прямой, за отрезком
-LEFT, RIGHT, BEHIND, BETWEEN, BEYOND = range(5)
+cdef int LEFT = 0, RIGHT = 1, BEHIND = 2, BETWEEN = 3, BEYOND = 4
 
 
 class Point:
@@ -68,7 +71,7 @@ class Point:
 # PARALLEL      - отрезки лежат на параллельных прямых
 # SKEW_CROSS    - отрезки пересекаются
 # SKEW_NO_CROSS - прямые на которых лежат отрезки пересекаются, а сами отрезки нет.
-COLLINEAR, PARALLEL, SKEW_CROSS, SKEW_NO_CROSS = range(4)
+cdef int COLLINEAR = 0, PARALLEL = 1, SKEW_CROSS = 2, SKEW_NO_CROSS = 3
 
 
 class Edge:
