@@ -1,6 +1,6 @@
 #! -*- coding: utf-8 -*-
 
-from __future__ import division
+from __future__ import division, print_function
 
 cimport cython
 from cpython.object cimport Py_EQ, Py_NE
@@ -244,43 +244,62 @@ cpdef double triangle_area(Point start, Point stop):
     return (start.x * stop.y - start.y * stop.x)/2
 
 
-UNKNOWN, INSIDE, OUTSIDE = range(3)
-def intersection(P, Q):
+cdef enum:
+    UNKNOWN = 1
+    INSIDE = 2
+    OUTSIDE = 3
+
+
+def intersection_area(P, Q):
     """
     Алгоритм пересечения двух выпуклых многоугольников P, Q.
     Ласло. Вычислительная геометрия и компьютерная графика на c++.
     Сложность по времени линейная по числу вершин: O(|P| + |Q|)
 
-    Полигоны ориентированы против часовой стрелки.
+    Полигоны ориентированы по часовой стрелке.
     """
-    R = None
-    flag = UNKNOWN
-    main_phase = False
-    max_iterations = 2 * (P.N + Q.N)
-    start_point = None
+    # print(P, Q)
 
-    i = 0
+    cdef double area = 0
+    cdef int flag = UNKNOWN
+    cdef int main_phase = 0
+    cdef int max_iterations = 2 * (P.N + Q.N)
+    cdef Point start_point, current_point, next_point
+    cdef Edge p, q
+    cdef int p_aims_q, q_aims_p
+    cdef PointOrientation p_pos, q_pos
+    cdef LineOrientation cross_type
+
+    cdef int i = 0
     while i < max_iterations or main_phase:
         i += 1
+        if i > 30:
+            break
+        # print(i)
         p = P.e()
         q = Q.e()
         p_pos = q.point_classify(p.stop)
         q_pos = p.point_classify(q.stop)
         cross_type = p.edge_classify(q)
         if cross_type == SKEW_CROSS:
-            intersection_point = p.intersection_point(q)
+            next_point = p.intersection_point(q)
+            # print('intersection point', next_point)
             if not main_phase:
-                main_phase = True
-                R = []
-                R.append(intersection_point)
-                start_point = intersection_point
-            elif not intersection_point == R[-1]:
-                if intersection_point == start_point:
-                    xs = np.array([p.x for p in R], dtype=np.float_)
-                    ys = np.array([p.y for p in R], dtype=np.float_)
-                    return Polygon(xs, ys)
+                main_phase = 1
+                start_point = current_point = next_point
+                # print('start', current_point, next_point, start_point)
+                # print(area)
+            elif next_point != current_point:
+                if next_point == start_point:
+                    area += triangle_area(current_point, start_point)
+                    # print('stop', current_point, next_point, start_point)
+                    # print(area)
+                    return abs(area)
                 else:
-                    R.append(intersection_point)
+                    area += triangle_area(current_point, next_point)
+                    # print('skew', current_point, next_point, start_point)
+                    # print(area)
+                    current_point = next_point
             if p_pos == RIGHT:
                 flag = INSIDE
             elif q_pos == RIGHT:
@@ -301,11 +320,19 @@ def intersection(P, Q):
         elif p_aims_q:
             P.advance()
             if flag == INSIDE:
-                R.append(P.v())
+                next_point = P.v()
+                area += triangle_area(current_point, next_point)
+                # print('inside', current_point, next_point, start_point)
+                # print(area)
+                current_point = next_point
         elif q_aims_p:
             Q.advance()
             if flag == OUTSIDE:
-                R.append(Q.v())
+                next_point = Q.v()
+                area += triangle_area(current_point, next_point)
+                # print('outside', current_point, next_point, start_point)
+                # print(area)
+                current_point = next_point
         else:
             if flag == OUTSIDE or (flag == UNKNOWN and p_pos == LEFT):
                 P.advance()
@@ -313,7 +340,10 @@ def intersection(P, Q):
                 Q.advance()
 
     if P.contains(Q.v()):
-        return Q
+        # print('second inside first')
+        return Q.area()
     elif Q.contains(P.v()):
-        return P
-    return Polygon(np.array([0.]), np.array([0.]))
+        # print('first inside second')
+        return P.area()
+    # print('no intersection')
+    return 0

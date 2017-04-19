@@ -37,9 +37,12 @@ def test_polygon_intersection_area():
     p2 = Polygon(np.array([-2., -2., 2., 2.]), np.array([-2., 2., 2., -2.]))
     p3 = Polygon(np.array([0., -3., 0., 3.]), np.array([-3., 0., 3., 0.]))
     p4 = Polygon(np.array([4., 4., 5., 5.]), np.array([4., 5., 5., 4.]))
-    assert intersection(p, p2).area() == 1.
-    assert intersection(p, p3).area() == 1.
-    assert intersection(p, p4).area() == 0.
-    assert intersection(p2, p3).area() == 14
-    assert intersection(p2, p4).area() == 0
-    assert intersection(p3, p4).area() == 0
+    p5 = Polygon(np.array([1., 2., 3., 2.]), np.array([0.5, 1., 1, 0.5]))
+    assert intersection_area(p, p2) == 1.
+    assert intersection_area(p, p3) == 1.
+    assert intersection_area(p3, p) == 1.
+    assert intersection_area(p, p4) == 0.
+    assert intersection_area(p2, p3) == 14
+    assert intersection_area(p2, p4) == 0
+    assert intersection_area(p3, p4) == 0
+    # assert intersection_area(p, p5) == 0
